@@ -45,7 +45,36 @@ static int GridYBlocks = 7;
     
     RACTuple *startBlock = RACTuplePack(@1, @2);
     
-    RACSignal *spiritRunSignal = nil;
+    stepSignal = [[[stepSignal scanWithStart:startBlock reduce:^id(RACTuple *last, RACTuple *direction) {
+        RACTupleUnpack(NSNumber *x1, NSNumber *y1) = last;
+        RACTupleUnpack(NSNumber *x2, NSNumber *y2) = direction;
+        NSNumber *x = @(x1.integerValue + x2.integerValue);
+        NSNumber *y = @(y1.integerValue + y2.integerValue);
+        return RACTuplePack(x, y);
+    }] concat:[RACSignal return: startBlock]] collect];
+    
+    RACSignal *autoClickSignal = [self.autoRunBtn rac_signalForControlEvents:UIControlEventTouchUpInside];
+    RACSignal *oneStepClickSignal = [self.oneStepBtn rac_signalForControlEvents:UIControlEventTouchUpInside];
+    
+    RACSignal *idSignal = [RACSignal return: nil];
+    RACSignal *timerSignal = [RACSignal interval:1 onScheduler:[RACScheduler mainThreadScheduler]];
+    
+    
+    RACSignal *oneStepSignal = [[[autoClickSignal mapReplace:timerSignal] merge:[oneStepClickSignal mapReplace:idSignal]] switchToLatest];
+    
+    RACSignal *spiritRunSignal = [[[[stepSignal combineLatestWith:oneStepSignal] reduceEach:^id(NSArray *steps, id _){
+        return steps;
+    }] scanWithStart:nil reduce:^id(RACTuple *value, NSArray *steps) {
+        NSNumber *idx = value.second;
+        
+        return RACTuplePack(steps[idx.integerValue],
+                            @((idx.integerValue + 1) % steps.count));
+    }] reduceEach:^id(NSArray *steps, id _){
+        return steps;
+    }];
+    
+    
+
     @weakify(self)
     [spiritRunSignal subscribeNext:^(RACTuple *xy) {
         @strongify(self)
